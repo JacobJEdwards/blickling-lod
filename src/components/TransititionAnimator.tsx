@@ -1,6 +1,6 @@
 import {CameraState} from "../types.ts";
 import React, {useEffect, useRef} from "react";
-import {useFrame, useThree} from "@react-three/fiber";
+import {RootState, useFrame, useThree} from "@react-three/fiber";
 import {OrbitControls as OrbitControlsImpl} from "three-stdlib";
 import {PointerLockControls as PointerLockControlsImpl} from "three-stdlib";
 import * as THREE from "three";
@@ -15,7 +15,9 @@ export interface TransitionAnimatorProps {
 
 export const TransitionAnimator: React.FC<TransitionAnimatorProps> = ({ startState, targetState, onTransitionComplete, enabled }) => {
     const { camera } = useThree();
-    const controls = useThree((state) => state.controls) as OrbitControlsImpl | PointerLockControlsImpl | null;
+    const controls = useThree((state: RootState) => state.controls) as OrbitControlsImpl | PointerLockControlsImpl | null;
+
+    console.log(controls);
 
     const targetPosRef = useRef(new THREE.Vector3());
     const targetLookAtRef = useRef(new THREE.Vector3());

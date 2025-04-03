@@ -3,6 +3,7 @@ import {FC, ReactElement, useMemo} from "react";
 import {useLoader} from "@react-three/fiber";
 import {MTLLoader} from "three/examples/jsm/loaders/MTLLoader.js";
 import {OBJLoader} from "three/examples/jsm/loaders/OBJLoader.js";
+import {Object3D} from "three";
 
 export interface ObjDetailProps {
     objUrl: string;
@@ -30,7 +31,7 @@ export const ObjDetailViewer: FC<ObjDetailProps> = ({
         cloned.position.set(...position);
         cloned.scale.set(scale, scale, scale);
         cloned.rotation.set(...(rotation || [0, 0, 0]));
-        cloned.traverse((child) => {
+        cloned.traverse((child: Object3D): void => {
             child.castShadow = true;
             child.receiveShadow = true;
         });

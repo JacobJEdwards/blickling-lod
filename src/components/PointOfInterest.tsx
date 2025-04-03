@@ -1,5 +1,5 @@
 import {FC, ReactElement, useRef, useState} from "react";
-import {usePreventClickPropagation} from "../hooks/hooks.tsx"; // Assuming this hook works correctly
+import {usePreventClickPropagation} from "../hooks/hooks.tsx";
 import {Html} from "@react-three/drei";
 import {PoiData} from "../types.ts";
 import {POI_HITBOX_RADIUS} from "../constants.ts";

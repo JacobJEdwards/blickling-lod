@@ -1,78 +1,68 @@
-import {FC, Fragment, ReactElement, Suspense, useCallback, useEffect, useRef, useState} from "react";
-import {useFrame, useThree} from "@react-three/fiber";
+import {FC, ReactElement, useCallback, useEffect, useRef, useState} from "react";
+import {useThree} from "@react-three/fiber";
 import {CameraState, PoiData} from "../types.ts";
 import {OrbitControls as OrbitControlsImpl, PointerLockControls as PointerLockControlsImpl} from "three-stdlib";
-import {INITIAL_ROOM_VIEW_STATE, POINTS_OF_INTEREST, ROOM_DEPTH, ROOM_HEIGHT, ROOM_WIDTH} from "../constants.ts";
-import {Html, OrbitControls, PointerLockControls, Splat, Stats, useProgress} from "@react-three/drei";
-import {usePlayerMovement} from "../hooks/hooks.tsx";
+import {
+    INITIAL_ROOM_VIEW_STATE,
+    PLAYER_HEIGHT,
+    POINTS_OF_INTEREST,
+    ROOM_DEPTH,
+    ROOM_HEIGHT,
+    ROOM_WIDTH
+} from "../constants.ts";
+import {Html, OrbitControls, PointerLockControls, Stats, useProgress} from "@react-three/drei";
+import {usePlayerMovement, usePoiTargeting, usePreventClickPropagation} from "../hooks/hooks.tsx";
 import * as THREE from "three";
 import Loader from "./Loader.tsx";
-import Room from "./Room.tsx";
-import PointOfInterest from "./PointOfInterest.tsx";
-import ObjDetailViewer from "./ObjDetailViewer.tsx";
-import BackButton from "./BackButton.tsx";
 import TransitionAnimator from "./TransititionAnimator.tsx";
+import {RoomView} from "./RoomView.tsx";
+import DetailView from "./DetailView.tsx";
+
+const SceneLighting: FC = (): ReactElement => (
+    <>
+        <ambientLight intensity={0.4}/>
+        <hemisphereLight groundColor={0x444444} intensity={0.5}/>
+        <directionalLight
+            position={[8, 15, 10]}
+            intensity={1.0}
+            castShadow={true}
+            shadow-mapSize-width={2048}
+            shadow-mapSize-height={2048}
+            shadow-camera-far={50}
+            shadow-camera-left={-ROOM_WIDTH * 1.5}
+            shadow-camera-right={ROOM_WIDTH * 1.5}
+            shadow-camera-top={ROOM_DEPTH * 1.5}
+            shadow-camera-bottom={-ROOM_DEPTH * 1.5}
+            shadow-bias={-0.0001}
+        />
+        <pointLight position={[0, ROOM_HEIGHT - 0.5, 0]} intensity={0.7} distance={ROOM_WIDTH * 1.5}
+                    castShadow={true} shadow-mapSize={[1024, 1024]} shadow-bias={-0.001}/>
+    </>)
 
 export const Experience: FC = () => {
     const {camera, scene, gl} = useThree();
+
     const [activePoi, setActivePoi] = useState<PoiData | null>(null);
     const [isExploring, setIsExploring] = useState(true);
     const [isLocked, setIsLocked] = useState(false);
-    const [targetedPoiId, setTargetedPoiId] = useState<string | null>(null);
-
-    const pointerLockControlsRef = useRef<PointerLockControlsImpl>(null);
-    const orbitControlsRef = useRef<OrbitControlsImpl>(null);
-
     const [isTransitioning, setIsTransitioning] = useState(false);
     const [transitionStartState, setTransitionStartState] = useState<CameraState | null>(null);
     const [transitionTargetState, setTransitionTargetState] = useState<CameraState | null>(null);
-
+    const [isInit, setInit] = useState<boolean>(false);
     const lastRoomCameraState = useRef<CameraState>(INITIAL_ROOM_VIEW_STATE);
+
+    const pointerLockControlsRef = useRef<PointerLockControlsImpl>(null);
+    const orbitControlsRef = useRef<OrbitControlsImpl>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
+
     const {active: assetsLoading} = useProgress();
 
-    const targetingRaycaster = useRef(new THREE.Raycaster());
-    const poiHitboxesRef = useRef<THREE.Object3D[]>([]);
+    const targetedPoiId = usePoiTargeting(isExploring, isLocked, isTransitioning, isInit)
 
-    useEffect(() => {
-        if (isExploring && !isTransitioning) {
-            const hitboxes: THREE.Object3D[] = [];
-            scene.traverse((object) => {
-                if (object.userData.isPoiHitbox) {
-                    hitboxes.push(object);
-                }
-            });
-            poiHitboxesRef.current = hitboxes;
-        } else {
-            poiHitboxesRef.current = [];
-        }
-    }, [isExploring, isTransitioning, scene]);
+    console.log(targetedPoiId)
 
-    useFrame(() => {
-        if (isExploring && isLocked && !isTransitioning && poiHitboxesRef.current.length > 0) {
-            targetingRaycaster.current.setFromCamera(new THREE.Vector2(0, 0), camera); // Center screen
-            const intersects = targetingRaycaster.current.intersectObjects(poiHitboxesRef.current);
-
-            if (intersects.length > 0) {
-                const firstHit = intersects[0];
-                const hitPoi = firstHit.object.userData.poi as PoiData;
-                if (hitPoi && hitPoi.id !== targetedPoiId) {
-                    setTargetedPoiId(hitPoi.id);
-                } else if (!hitPoi && targetedPoiId !== null) {
-                    setTargetedPoiId(null);
-                }
-            } else {
-                if (targetedPoiId !== null) {
-                    setTargetedPoiId(null);
-                }
-            }
-        } else {
-            if (targetedPoiId !== null) {
-                setTargetedPoiId(null);
-            }
-        }
-    });
-
-    usePlayerMovement(true);
+    usePlayerMovement(isExploring);
+    usePreventClickPropagation(overlayRef);
 
     const handlePoiClick = useCallback((poi: PoiData) => {
         if (isTransitioning || !isExploring) return;
@@ -108,10 +98,18 @@ export const Experience: FC = () => {
             orbitControlsRef.current.enabled = false;
         }
 
+        if (pointerLockControlsRef.current) {
+            pointerLockControlsRef.current.lock();
+        }
+
         const detailCamPos = camera.position.toArray();
         const detailTarget = orbitControlsRef.current?.target.toArray() as THREE.Vector3Tuple ?? activePoi.cameraTarget;
         setTransitionStartState({position: detailCamPos, target: detailTarget});
-        setTransitionTargetState(lastRoomCameraState.current);
+
+        const toTarget = lastRoomCameraState.current;
+        toTarget.target[1] = PLAYER_HEIGHT;
+
+        setTransitionTargetState(toTarget);
 
         setIsTransitioning(true);
         setActivePoi(null);
@@ -141,11 +139,11 @@ export const Experience: FC = () => {
             return;
         }
 
-        const handleLock = () => {
+        const handleLock = (): void => {
             setIsLocked(true);
         };
-        const handleUnlock = () => {
-            // setIsLocked(false);
+        const handleUnlock = (): void => {
+            setIsLocked(false);
         };
 
         controlsInstance.addEventListener('lock', handleLock);
@@ -155,40 +153,28 @@ export const Experience: FC = () => {
             controlsInstance.removeEventListener('lock', handleLock);
             controlsInstance.removeEventListener('unlock', handleUnlock);
         };
-    }, [pointerLockControlsRef]);
+    }, []);
+
+    const requestPointerLock = useCallback(() => {
+        setInit(true)
+
+        if (isExploring && !isLocked && !isTransitioning && pointerLockControlsRef.current) {
+            pointerLockControlsRef.current.lock()
+        }
+    }, [isExploring, isLocked, isTransitioning, pointerLockControlsRef]);
 
 
     useEffect(() => {
         const handleRaycastClick = (event: MouseEvent): void => {
             console.log("handling click")
 
-            if (!isExploring || !isLocked || isTransitioning || event.button !== 0) return;
-
-            const targetElement = event.target as Element;
-
-            if (!gl.domElement.contains(targetElement) && !targetElement.id?.includes('request-lock')) {
+            if (!isExploring || !isLocked || isTransitioning || event.button !== 0 || !targetedPoiId) {
                 return;
             }
 
-            const raycaster = new THREE.Raycaster();
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            const hitboxes: THREE.Object3D[] = [];
-
-            scene.traverse((object) => {
-                if (object.userData.isPoiHitbox) {
-                    hitboxes.push(object);
-                }
-            });
-
-            const intersects = raycaster.intersectObjects(hitboxes);
-
-            if (intersects.length > 0) {
-                const firstHit = intersects[0];
-                const hitPoi = firstHit.object.userData.poi as PoiData;
-                if (hitPoi) {
-                    handlePoiClick(hitPoi);
-                }
+            const poiToClick = POINTS_OF_INTEREST.find(p => p.id === targetedPoiId);
+            if (poiToClick) {
+                handlePoiClick(poiToClick);
             }
         };
 
@@ -196,97 +182,44 @@ export const Experience: FC = () => {
             gl.domElement.addEventListener('click', handleRaycastClick);
         }
 
-        return () => {
+        return (): void => {
             gl.domElement.removeEventListener('click', handleRaycastClick);
         };
-    }, [isLocked, isExploring, isTransitioning, camera, scene, gl.domElement, handlePoiClick]);
-
-
-    const requestPointerLock = useCallback(() => {
-        if (isExploring && !isLocked && !isTransitioning && pointerLockControlsRef.current) {
-            pointerLockControlsRef.current.lock()
-        }
-    }, [isExploring, isLocked, isTransitioning, pointerLockControlsRef]);
+    }, [isLocked, isExploring, isTransitioning, camera, scene, gl.domElement, handlePoiClick, targetedPoiId]);
 
 
     return (
         <>
-            <ambientLight intensity={0.4}/>
-            <hemisphereLight groundColor={0x444444} intensity={0.5}/>
-            <directionalLight
-                position={[8, 15, 10]}
-                intensity={1.0}
-                castShadow={true}
-                shadow-mapSize-width={2048}
-                shadow-mapSize-height={2048}
-                shadow-camera-far={50}
-                shadow-camera-left={-ROOM_WIDTH * 1.5}
-                shadow-camera-right={ROOM_WIDTH * 1.5}
-                shadow-camera-top={ROOM_DEPTH * 1.5}
-                shadow-camera-bottom={-ROOM_DEPTH * 1.5}
-                shadow-bias={-0.0001}
-            />
-            <pointLight position={[0, ROOM_HEIGHT - 0.5, 0]} intensity={0.7} distance={ROOM_WIDTH * 1.5}
-                        castShadow={true} shadow-mapSize={[1024, 1024]} shadow-bias={-0.001}/>
+            <SceneLighting/>
+            <Stats/>
 
-            <Suspense fallback={<Loader message="Loading Room..."/>}>
-                <group visible={isExploring || (isTransitioning && !activePoi)}>
-                    <Room/>
-                    <group position={[3, ROOM_HEIGHT - 1.5, 0]}>
-                        <Splat
-                            src="/splat.splat"
-                            rotation={[0, 15, 0]}
-                            toneMapped={false}
-                            scale={15}
-                            castShadow={false}
-                            alphaTest={0.1}
-                        />
-                    </group>
-                </group>
-            </Suspense>
+            <RoomView isVisible={isExploring || (isTransitioning && !activePoi)}
+                      targetedPoiId={targetedPoiId} onPoiClick={handlePoiClick}/>
 
-            {isExploring && !isTransitioning && POINTS_OF_INTEREST.map((poi: PoiData): ReactElement => (
-                <Fragment key={poi.id}>
-                    <PointOfInterest
-                        onClick={() => handlePoiClick(poi)}
-                        isTargeted={poi.id === targetedPoiId}
-                        {...poi}
-                    />
-                </Fragment>
-            ))}
+            <DetailView
+                isVisible={!isExploring || (isTransitioning && activePoi !== null)}
+                activePoi={activePoi}
+                isTransitioning={isTransitioning}
+                onBackClick={handleBackClick}
+                />
 
-
-            <group visible={!!activePoi || (isTransitioning && activePoi !== null)}>
-                {activePoi && (
-                    <Suspense fallback={<Loader message={`Loading ${activePoi.name}...`}/>}>
-                        <ObjDetailViewer
-                            key={activePoi.id}
-                            objUrl={activePoi.objUrl}
-                            mtlUrl={activePoi.mtlUrl}
-                            position={[0, 0, 0]}
-                            scale={activePoi.scale}
-                            rotation={activePoi.rotation}
-                        />
-                        {!isTransitioning && <BackButton onClick={handleBackClick}/>}
-                    </Suspense>
-                )}
-            </group>
-
-            {isExploring && !isTransitioning && !activePoi && (
+            {isExploring && !activePoi && (
                 <PointerLockControls
                     ref={pointerLockControlsRef}
+                    camera={camera}
                     makeDefault
                 />
             )}
 
-            {!isExploring && !isTransitioning && activePoi && (
+            {!isExploring && activePoi && (
                 <OrbitControls
                     ref={orbitControlsRef}
+                    camera={camera}
                     enablePan={true}
                     enableZoom={true}
                     enableRotate={true}
                     target={activePoi.cameraTarget}
-                    enabled={!isTransitioning && !isExploring && !!activePoi}
+                    enabled={true}
                 />
             )}
 
@@ -297,11 +230,10 @@ export const Experience: FC = () => {
                 onTransitionComplete={handleTransitionComplete}
             />
 
-            <Stats/>
 
             {assetsLoading && <Loader message="Loading Assets..."/>}
 
-            {isExploring && !isLocked && !isTransitioning && !activePoi && (
+            {!isInit && (
                 <Html fullscreen style={{zIndex: 1}}>
                     <div
                         id="request-lock-overlay"
