@@ -20,7 +20,7 @@ export const DetailView: FC<DetailViewProps> = ({ isVisible, activePoi, isTransi
                 key={activePoi.id}
                 objUrl={activePoi.objUrl}
                 mtlUrl={activePoi.mtlUrl}
-                position={[0, 0, 0]}
+                position={activePoi.position}
                 scale={activePoi.scale}
                 rotation={activePoi.rotation}
             />

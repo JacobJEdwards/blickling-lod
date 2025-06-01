@@ -20,7 +20,7 @@ const App: FC = (): ReactElement => {
                     camera.lookAt(new THREE.Vector3(...INITIAL_ROOM_VIEW_STATE.target));
                     camera.updateProjectionMatrix();
                 }}
-            >
+
                 <Suspense fallback={<Loader />}>
                     <Experience />
                 </Suspense>

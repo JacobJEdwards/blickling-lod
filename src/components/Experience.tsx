@@ -59,8 +59,6 @@ export const Experience: FC = () => {
 
     const targetedPoiId = usePoiTargeting(isExploring, isLocked, isTransitioning, isInit)
 
-    console.log(targetedPoiId)
-
     usePlayerMovement(isExploring);
     usePreventClickPropagation(overlayRef);
 
@@ -193,7 +191,7 @@ export const Experience: FC = () => {
             <SceneLighting/>
             <Stats/>
 
-            <RoomView isVisible={isExploring || (isTransitioning && !activePoi)}
+            <RoomView isVisible={true}
                       targetedPoiId={targetedPoiId} onPoiClick={handlePoiClick}/>
 
             <DetailView

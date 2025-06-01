@@ -76,8 +76,8 @@ export const usePlayerMovement = (isLocked: boolean) => {
         currentControls.moveForward(-velocity.current.z * delta);
 
         const camPos = camera.position;
-        camPos.x = THREE.MathUtils.clamp(camPos.x, -ROOM_WIDTH / 2 + 0.5, ROOM_WIDTH / 2 - 0.5);
-        camPos.z = THREE.MathUtils.clamp(camPos.z, -ROOM_DEPTH / 2 + 0.5, ROOM_DEPTH / 2 - 0.5);
+        // camPos.x = THREE.MathUtils.clamp(camPos.x, -ROOM_WIDTH / 2 + 0.5, ROOM_WIDTH / 2 - 0.5);
+        // camPos.z = THREE.MathUtils.clamp(camPos.z, -ROOM_DEPTH / 2 + 0.5, ROOM_DEPTH / 2 - 0.5);
         camPos.y = PLAYER_HEIGHT;
     });
 };
